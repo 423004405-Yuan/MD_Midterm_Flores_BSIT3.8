@@ -1,6 +1,5 @@
 import 'dart:io';
 
-// ───────────────────────── Custom exception ─────────────────────────
 class CenterException implements Exception {
   final String message;
   CenterException(this.message);
@@ -8,8 +7,6 @@ class CenterException implements Exception {
   String toString() => message;
 }
 
-// ───────────────────────── Mixin ─────────────────────────
-/// Reusable behavior: records when an object was created.
 mixin Timestamped {
   DateTime? _createdAt;
 
@@ -25,7 +22,7 @@ mixin Timestamped {
   }
 }
 
-// ───────────────────────── Abstract parent ─────────────────────────
+
 abstract class CenterRecord with Timestamped {
   final String _id;
   String _name;
@@ -34,7 +31,7 @@ abstract class CenterRecord with Timestamped {
     stamp();
   }
 
-  // Encapsulation: controlled access through getters/setters
+
   String get id => _id;
   String get name => _name;
   set name(String value) {
@@ -46,11 +43,10 @@ abstract class CenterRecord with Timestamped {
 
   String get recordType;
 
-  /// Shared method each subclass implements in its own way.
+
   String describe();
 }
 
-// ───────────────────────── Learning resources ─────────────────────────
 class LearningResource extends CenterRecord {
   final String _category;
   final double _price;
@@ -68,7 +64,7 @@ class LearningResource extends CenterRecord {
   int get totalCopies => _totalCopies;
   bool get isAvailable => _availableCopies > 0;
 
-  // Calculation using operators
+
   double get totalValue => _price * _totalCopies;
 
   @override
@@ -94,13 +90,13 @@ class LearningResource extends CenterRecord {
   }
 }
 
-// ───────────────────────── Participants ─────────────────────────
+
 abstract class Participant extends CenterRecord {
   final List<String> _borrowedIds = [];
 
   Participant(super.id, super.name);
 
-  /// Each participant type has a different borrowing limit.
+
   int get borrowLimit;
 
   List<String> get borrowedIds => List.unmodifiable(_borrowedIds);
@@ -147,10 +143,10 @@ class Instructor extends Participant {
   }
 }
 
-// ───────────────────────── Manager (uses List + Map) ─────────────────────────
+
 class CenterManager {
-  final List<LearningResource> _resources = []; // List of resources
-  final Map<String, Participant> _participants = {}; // Map: id -> participant
+  final List<LearningResource> _resources = []; 
+  final Map<String, Participant> _participants = {}; 
   int _resourceCounter = 0;
   int _participantCounter = 0;
 
@@ -227,10 +223,10 @@ class CenterManager {
       _resources.fold(0.0, (sum, r) => sum + r.totalValue);
 }
 
-// ───────────────────────── User-defined functions ─────────────────────────
+
 String formatMoney(double amount) => 'PHP ${amount.toStringAsFixed(2)}';
 
-/// Keeps asking until the user enters non-empty text.
+
 String readText(String prompt) {
   while (true) {
     stdout.write(prompt);
@@ -244,7 +240,7 @@ String readText(String prompt) {
   }
 }
 
-/// Keeps asking until the user enters an integer within [min, max].
+
 int readInt(String prompt, int min, int max) {
   while (true) {
     final input = readText(prompt);
@@ -259,7 +255,7 @@ int readInt(String prompt, int min, int max) {
   }
 }
 
-/// Keeps asking until the user enters a valid non-negative price.
+
 double readPrice(String prompt) {
   while (true) {
     final input = readText(prompt);
@@ -285,7 +281,7 @@ void printMenu() {
   print('---------------------------------');
 }
 
-// ───────────────────────── Menu actions ─────────────────────────
+
 void addResourceFlow(CenterManager manager) {
   final title = readText('Resource title: ');
   final category = readText('Category (Book/Video/Module): ');
@@ -345,7 +341,7 @@ void viewParticipants(CenterManager manager) {
   });
 }
 
-/// Polymorphism: every object is handled as a CenterRecord.
+
 void viewAllRecords(CenterManager manager) {
   final records = manager.allRecords;
   if (records.isEmpty) {
@@ -354,12 +350,12 @@ void viewAllRecords(CenterManager manager) {
   }
   print('\n=== ALL CENTER RECORDS ===');
   for (final CenterRecord record in records) {
-    print(record.describe()); // each subclass runs its own version
+    print(record.describe());
   }
   print('Total records: ${records.length}');
 }
 
-// ───────────────────────── Main ─────────────────────────
+
 void main() {
   final manager = CenterManager();
   var running = true;
