@@ -1,0 +1,429 @@
+// ───────────────────────── Custom exception ─────────────────────────
+class CenterException implements Exception {
+  final String message;
+  CenterException(this.message);
+  @override
+  String toString() => message;
+}
+
+// ───────────────────────── Mixin ─────────────────────────
+/// Reusable behavior: records when an object was created.
+mixin Timestamped {
+  DateTime? _createdAt;
+
+  void stamp() {
+    _createdAt = DateTime.now();
+  }
+
+  String get createdLabel {
+    final t = _createdAt;
+    if (t == null) return 'N/A';
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
+  }
+}
+
+// ───────────────────────── Abstract parent ─────────────────────────
+abstract class CenterRecord with Timestamped {
+  final String _id;
+  String _name;
+
+  CenterRecord(this._id, this._name) {
+    stamp();
+  }
+
+  // Encapsulation: controlled access through getters/setters
+  String get id => _id;
+  String get name => _name;
+  set name(String value) {
+    if (value.trim().isEmpty) {
+      throw CenterException('Name cannot be empty.');
+    }
+    _name = value.trim();
+  }
+
+  String get recordType;
+
+  /// Shared method each subclass implements in its own way.
+  String describe();
+}
+
+// ───────────────────────── Learning resources ─────────────────────────
+class LearningResource extends CenterRecord {
+  final String _category;
+  final double _price;
+  final int _totalCopies;
+  int _availableCopies;
+
+  LearningResource(
+      String id, String title, this._category, this._price, int copies)
+      : _totalCopies = copies,
+        _availableCopies = copies,
+        super(id, title);
+
+  String get category => _category;
+  int get availableCopies => _availableCopies;
+  int get totalCopies => _totalCopies;
+  bool get isAvailable => _availableCopies > 0;
+
+  // Calculation using operators
+  double get totalValue => _price * _totalCopies;
+
+  @override
+  String get recordType => 'Resource';
+
+  bool checkOut() {
+    if (!isAvailable) return false;
+    _availableCopies--;
+    return true;
+  }
+
+  void checkIn() {
+    if (_availableCopies < _totalCopies) {
+      _availableCopies++;
+    }
+  }
+
+  @override
+  String describe() {
+    final status = isAvailable ? 'Available' : 'Out of stock';
+    return '[$recordType] $id | $name | $_category | ${formatMoney(_price)} | '
+        'Copies: $_availableCopies/$_totalCopies ($status) | Added: $createdLabel';
+  }
+}
+
+// ───────────────────────── Participants ─────────────────────────
+abstract class Participant extends CenterRecord {
+  final List<String> _borrowedIds = [];
+
+  Participant(super.id, super.name);
+
+  /// Each participant type has a different borrowing limit.
+  int get borrowLimit;
+
+  List<String> get borrowedIds => List.unmodifiable(_borrowedIds);
+  bool get canBorrow => _borrowedIds.length < borrowLimit;
+
+  void addBorrowed(String resourceId) => _borrowedIds.add(resourceId);
+  bool removeBorrowed(String resourceId) => _borrowedIds.remove(resourceId);
+  bool hasBorrowed(String resourceId) => _borrowedIds.contains(resourceId);
+}
+
+class Student extends Participant {
+  final String _program;
+
+  Student(super.id, super.name, this._program);
+
+  @override
+  int get borrowLimit => 3;
+
+  @override
+  String get recordType => 'Student';
+
+  @override
+  String describe() {
+    return '[$recordType] $id | $name | Program: $_program | '
+        'Borrowed: ${_borrowedIds.length}/$borrowLimit | Registered: $createdLabel';
+  }
+}
+
+class Instructor extends Participant {
+  final String _department;
+
+  Instructor(super.id, super.name, this._department);
+
+  @override
+  int get borrowLimit => 5;
+
+  @override
+  String get recordType => 'Instructor';
+
+  @override
+  String describe() {
+    return '[$recordType] $id | $name | Department: $_department | '
+        'Borrowed: ${_borrowedIds.length}/$borrowLimit | Registered: $createdLabel';
+  }
+}
+
+// ───────────────────────── Manager (uses List + Map) ─────────────────────────
+class CenterManager {
+  final List<LearningResource> _resources = []; // List of resources
+  final Map<String, Participant> _participants = {}; // Map: id -> participant
+  int _resourceCounter = 0;
+  int _participantCounter = 0;
+
+  List<LearningResource> get resources => List.unmodifiable(_resources);
+  Map<String, Participant> get participants => Map.unmodifiable(_participants);
+
+  List<CenterRecord> get allRecords =>
+      <CenterRecord>[..._resources, ..._participants.values];
+
+  LearningResource addResource(
+      String title, String category, double price, int copies) {
+    _resourceCounter++;
+    final id = 'R${_resourceCounter.toString().padLeft(3, '0')}';
+    final resource = LearningResource(id, title, category, price, copies);
+    _resources.add(resource);
+    return resource;
+  }
+
+  Participant registerParticipant(String name, bool isStudent, String extra) {
+    _participantCounter++;
+    final id = 'P${_participantCounter.toString().padLeft(3, '0')}';
+    final Participant p =
+        isStudent ? Student(id, name, extra) : Instructor(id, name, extra);
+    _participants[id] = p;
+    return p;
+  }
+
+  LearningResource? findResource(String id) {
+    for (final r in _resources) {
+      if (r.id == id) return r;
+    }
+    return null;
+  }
+
+  void borrow(String participantId, String resourceId) {
+    final participant = _participants[participantId];
+    if (participant == null) {
+      throw CenterException('Participant "$participantId" not found.');
+    }
+    final resource = findResource(resourceId);
+    if (resource == null) {
+      throw CenterException('Resource "$resourceId" not found.');
+    }
+    if (!participant.canBorrow) {
+      throw CenterException(
+          '${participant.name} reached the borrow limit (${participant.borrowLimit}).');
+    }
+    if (participant.hasBorrowed(resourceId)) {
+      throw CenterException('${participant.name} already borrowed this item.');
+    }
+    if (!resource.checkOut()) {
+      throw CenterException('"${resource.name}" has no copies available.');
+    }
+    participant.addBorrowed(resourceId);
+  }
+
+  void returnResource(String participantId, String resourceId) {
+    final participant = _participants[participantId];
+    if (participant == null) {
+      throw CenterException('Participant "$participantId" not found.');
+    }
+    final resource = findResource(resourceId);
+    if (resource == null) {
+      throw CenterException('Resource "$resourceId" not found.');
+    }
+    if (!participant.removeBorrowed(resourceId)) {
+      throw CenterException(
+          '${participant.name} did not borrow "${resource.name}".');
+    }
+    resource.checkIn();
+  }
+
+  double get totalInventoryValue =>
+      _resources.fold(0.0, (sum, r) => sum + r.totalValue);
+}
+
+// ───────────────────────── User-defined functions ─────────────────────────
+String formatMoney(double amount) => 'PHP ${amount.toStringAsFixed(2)}';
+
+// DARTPAD TEST ONLY: scripted answers instead of keyboard input.
+final List<String> _scripted = [
+  // Scenario 1: add resource (with invalid price and copies first)
+  '1', 'Dart Basics', 'Book', 'abc', '250.50', 'abc', '2',
+  // Register a student
+  '2', '1', 'Ana Cruz', 'BSIT',
+  // Scenario 2: invalid menu choice
+  '9',
+  // Valid borrow (lowercase IDs are converted)
+  '3', 'p001', 'r001',
+  // Scenario 3: errors (duplicate borrow, resource not found)
+  '3', 'P001', 'R001',
+  '3', 'P001', 'R999',
+  // View all records, then participants
+  '7',
+  '6',
+  // Exit
+  '0',
+];
+int _next = 0;
+
+/// Reads the next scripted answer (replaces stdin in DartPad).
+String readText(String prompt) {
+  while (true) {
+    if (_next >= _scripted.length) {
+      throw StateError('Scripted input ran out.');
+    }
+    final input = _scripted[_next++];
+    print('$prompt$input');
+    if (input.trim().isNotEmpty) return input.trim();
+    print('  ! Input cannot be empty. Try again.');
+  }
+}
+
+/// Keeps asking until the user enters an integer within [min, max].
+int readInt(String prompt, int min, int max) {
+  while (true) {
+    final input = readText(prompt);
+    final value = int.tryParse(input);
+    if (value == null) {
+      print('  ! "$input" is not a whole number.');
+    } else if (value < min || value > max) {
+      print('  ! Enter a number from $min to $max.');
+    } else {
+      return value;
+    }
+  }
+}
+
+/// Keeps asking until the user enters a valid non-negative price.
+double readPrice(String prompt) {
+  while (true) {
+    final input = readText(prompt);
+    final value = double.tryParse(input);
+    if (value == null || value < 0) {
+      print('  ! Enter a valid price (e.g., 250.50).');
+    } else {
+      return value;
+    }
+  }
+}
+
+void printMenu() {
+  print('\n----------- MAIN MENU -----------');
+  print('1. Add learning resource');
+  print('2. Register participant');
+  print('3. Borrow resource');
+  print('4. Return resource');
+  print('5. View resources');
+  print('6. View participants');
+  print('7. View all records (polymorphism)');
+  print('0. Exit');
+  print('---------------------------------');
+}
+
+// ───────────────────────── Menu actions ─────────────────────────
+void addResourceFlow(CenterManager manager) {
+  final title = readText('Resource title: ');
+  final category = readText('Category (Book/Video/Module): ');
+  final price = readPrice('Price per copy: ');
+  final copies = readInt('Number of copies (1-100): ', 1, 100);
+  final r = manager.addResource(title, category, price, copies);
+  print('✔ Added: ${r.describe()}');
+}
+
+void registerFlow(CenterManager manager) {
+  final type = readInt('Type (1 = Student, 2 = Instructor): ', 1, 2);
+  final name = readText('Full name: ');
+  final isStudent = type == 1;
+  final extra = readText(isStudent ? 'Program: ' : 'Department: ');
+  final p = manager.registerParticipant(name, isStudent, extra);
+  print('✔ Registered: ${p.describe()}');
+}
+
+void borrowFlow(CenterManager manager) {
+  final pid = readText('Participant ID (e.g., P001): ').toUpperCase();
+  final rid = readText('Resource ID (e.g., R001): ').toUpperCase();
+  manager.borrow(pid, rid);
+  print('✔ Borrow recorded.');
+}
+
+void returnFlow(CenterManager manager) {
+  final pid = readText('Participant ID: ').toUpperCase();
+  final rid = readText('Resource ID: ').toUpperCase();
+  manager.returnResource(pid, rid);
+  print('✔ Return recorded.');
+}
+
+void viewResources(CenterManager manager) {
+  if (manager.resources.isEmpty) {
+    print('No resources yet.');
+    return;
+  }
+  print('\n=== LEARNING RESOURCES ===');
+  for (final r in manager.resources) {
+    print(r.describe());
+  }
+  print('Total inventory value: ${formatMoney(manager.totalInventoryValue)}');
+}
+
+void viewParticipants(CenterManager manager) {
+  if (manager.participants.isEmpty) {
+    print('No participants yet.');
+    return;
+  }
+  print('\n=== PARTICIPANTS ===');
+  manager.participants.forEach((id, p) {
+    print(p.describe());
+    for (final rid in p.borrowedIds) {
+      final res = manager.findResource(rid);
+      if (res != null) print('     - borrowed: ${res.name} ($rid)');
+    }
+  });
+}
+
+/// Polymorphism: every object is handled as a CenterRecord.
+void viewAllRecords(CenterManager manager) {
+  final records = manager.allRecords;
+  if (records.isEmpty) {
+    print('No records yet.');
+    return;
+  }
+  print('\n=== ALL CENTER RECORDS ===');
+  for (final CenterRecord record in records) {
+    print(record.describe()); // each subclass runs its own version
+  }
+  print('Total records: ${records.length}');
+}
+
+// ───────────────────────── Main ─────────────────────────
+void main() {
+  final manager = CenterManager();
+  var running = true;
+
+  print('=====================================================');
+  print('   COMMUNITY LEARNING CENTER MANAGEMENT SYSTEM');
+  print('=====================================================');
+
+  while (running) {
+    printMenu();
+    final choice = readText('Choose an option: ');
+
+    try {
+      switch (choice) {
+        case '1':
+          addResourceFlow(manager);
+          break;
+        case '2':
+          registerFlow(manager);
+          break;
+        case '3':
+          borrowFlow(manager);
+          break;
+        case '4':
+          returnFlow(manager);
+          break;
+        case '5':
+          viewResources(manager);
+          break;
+        case '6':
+          viewParticipants(manager);
+          break;
+        case '7':
+          viewAllRecords(manager);
+          break;
+        case '0':
+          running = false;
+          print('Thank you for using the system. Goodbye!');
+          break;
+        default:
+          print('  ! Invalid choice "$choice". Please select 0-7.');
+      }
+    } on CenterException catch (e) {
+      print('  ! Error: ${e.message}');
+    } catch (e) {
+      print('  ! Unexpected error: $e');
+    }
+  }
+}
